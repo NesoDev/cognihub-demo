@@ -1,6 +1,7 @@
+console.log('importando modulos')
 import createTagsQuestions from "./question.js";
 import sendAudio from "./api.js";
-
+console.log('modulos importados')
 let state = false;
 let mediaRecorder;
 let audioChunks = [];
