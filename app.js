@@ -1,8 +1,12 @@
+import createTagsQuestions from "./question";
+import sendAudio from "./api";
+
 let state = false;
 let mediaRecorder;
 let audioChunks = [];
 const button = document.getElementById('toggle-record');
 const audioPlayback = document.getElementById('audio-playback');
+let response;
 
 const requestAudioStream = async () => {
   try {
@@ -36,10 +40,16 @@ const startRecording = async () => {
   console.log('Grabación iniciada');
 };
 
-const stopRecording = () => {
+const stopRecording = async () => {
   button.classList.remove('recording');
   mediaRecorder.stop();
   console.log('Grabación detenida');
+
+  console.log('enviando audio')
+  response = await sendAudio(audioBlob);
+  console.log('respuesta recibida')
+  console.log(`res: ${response}`)
+  createTagsQuestions(document.body, response);
 };
 
 const toggleRecording = () => { 
