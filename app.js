@@ -4,6 +4,7 @@ let audioChunks = [];
 const button = document.getElementById('toggle-record');
 const audioPlayback = document.getElementById('audio-playback');
 let response;
+let audioBlob;
 
 const requestAudioStream = async () => {
   try {
@@ -26,7 +27,7 @@ const startRecording = async () => {
   };
 
   mediaRecorder.onstop = () => {
-    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+    audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
     const audioUrl = URL.createObjectURL(audioBlob);
     audioPlayback.src = audioUrl;
     audioPlayback.controls = true;
