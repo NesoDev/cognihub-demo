@@ -1,5 +1,5 @@
-import createTagsQuestions from "./question";
-import sendAudio from "./api";
+import createTagsQuestions from "./question.js";
+import sendAudio from "./api.js";
 
 let state = false;
 let mediaRecorder;
