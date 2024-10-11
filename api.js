@@ -1,4 +1,10 @@
-const ffmpeg = window.FFmpeg.createFFmpeg({ log: true });
+const ffmpeg = window.FFmpeg.createFFmpeg({
+    log: true,
+    corePath: "https://unpkg.com/@ffmpeg/core@0.10.0/dist/ffmpeg-core.js",
+    wasmBinary: null, // Usa la versión predeterminada del WASM
+    // Ajusta la memoria si es necesario
+    memory: new WebAssembly.Memory({ initial: 256, maximum: 512 })
+});
 
 const loadFFmpeg = async () => {
     if (!ffmpeg.isLoaded()) {
