@@ -1,3 +1,4 @@
+import { FFmpeg } from window.ffmpeg
 
 const ffmpeg = FFmpeg.createFFmpeg({ log: true });
 

@@ -1,4 +1,4 @@
-import { loadFFmpeg, processAudioWithFFmpeg } from "./ffmpeg.js";
+import { loadFFmpeg, processAudioWithFFmpeg } from "./api.js";
 
 let state = false;
 let mediaRecorder;
