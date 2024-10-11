@@ -1,5 +1,3 @@
-import { loadFFmpeg, processAudioWithFFmpeg } from "./api.js";
-
 let state = false;
 let mediaRecorder;
 let audioChunks = [];
@@ -27,7 +25,7 @@ const startRecording = async () => {
     console.log('Iniciando grabación...');
     button.classList.add('recording');
     const stream = await requestAudioStream();
-    
+
     mediaRecorder = new MediaRecorder(stream);
     
     mediaRecorder.ondataavailable = (event) => {
@@ -37,20 +35,24 @@ const startRecording = async () => {
 
     mediaRecorder.onstop = async () => {
         console.log('Grabación detenida, procesando audio...');
+        // Crear el Blob del audio directamente en formato WAV
         const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
 
-        // Cargar y procesar el audio con FFmpeg
-        await loadFFmpeg();
-        const audioUrl = await processAudioWithFFmpeg(audioBlob);
+        // Verifica que el Blob contenga audio PCM válido
+        if (audioBlob.size > 0) {
+            // Reproducir el audio grabado
+            const audioUrl = URL.createObjectURL(audioBlob);
+            audioPlayback.src = audioUrl;
+            audioPlayback.controls = true;
+            console.log('Audio listo para reproducirse.');
 
-        // Reproducir el audio convertido
-        audioPlayback.src = audioUrl;
-        audioPlayback.controls = true;
-
-        console.log('Enviando audio al servidor...');
-        const response = await sendAudio(audioBlob);
-        console.log('Respuesta del servidor recibida:', response);
-        createTagsQuestions(document.body, response);
+            console.log('Enviando audio al servidor...');
+            const response = await sendAudio(audioBlob);
+            console.log('Respuesta del servidor recibida:', response);
+            createTagsQuestions(document.body, response);
+        } else {
+            console.error('El Blob de audio está vacío.');
+        }
 
         audioChunks = []; // Limpiar fragmentos de audio
         console.log('Fragmentos de audio limpiados.');
