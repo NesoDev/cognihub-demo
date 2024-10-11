@@ -49,87 +49,6 @@ const sendAudioToDigitalOcean = async (audioBlob) => {
     }
 };
 
-// Función para convertir el Blob a WAV
-const convertBlobToWav = (audioBlob) => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            audioContext.decodeAudioData(reader.result)
-                .then((buffer) => {
-                    const wavBlob = bufferToWav(buffer);
-                    resolve(wavBlob);
-                })
-                .catch(reject);
-        };
-        reader.onerror = reject;
-        reader.readAsArrayBuffer(audioBlob);
-    });
-};
-
-// Función para convertir el buffer de audio a WAV
-const bufferToWav = (buffer) => {
-    const numOfChannels = buffer.numberOfChannels;
-    const length = buffer.length * numOfChannels * 2 + 44; // 44 bytes para el header WAV
-    const bufferWav = new ArrayBuffer(length);
-    const view = new DataView(bufferWav);
-    const channels = [];
-    let offset = 0;
-
-    // Escribir encabezado WAV
-    const writeString = (str) => {
-        for (let i = 0; i < str.length; i++) {
-            view.setUint8(offset + i, str.charCodeAt(i));
-        }
-        offset += str.length;
-    };
-
-    writeString('RIFF'); // Chunk ID
-    view.setUint32(offset, length - 8, true); // Chunk Size
-    offset += 4;
-    writeString('WAVE'); // Format
-    writeString('fmt '); // Subchunk1 ID
-    view.setUint32(offset, 16, true); // Subchunk1 Size
-    offset += 4;
-    view.setUint16(offset, 1, true); // Audio Format (PCM)
-    offset += 2;
-    view.setUint16(offset, numOfChannels, true); // Num Channels
-    view.setUint32(offset, 44100, true); // Sample Rate
-    view.setUint32(offset, 44100 * 2 * numOfChannels, true); // Byte Rate
-    view.setUint16(offset, numOfChannels * 2, true); // Block Align
-    view.setUint16(offset, 16, true); // Bits per sample
-    writeString('data'); // Subchunk2 ID
-    view.setUint32(offset, length - offset - 4, true); // Subchunk2 Size
-    offset += 4;
-
-    // Copiar los datos de audio
-    for (let channel = 0; channel < numOfChannels; channel++) {
-        channels[channel] = buffer.getChannelData(channel);
-    }
-    let interleaved = new Float32Array(length / 2);
-    let offsetInterleaved = 0;
-
-    for (let i = 0; i < buffer.length; i++) {
-        for (let channel = 0; channel < numOfChannels; channel++) {
-            interleaved[offsetInterleaved++] = channels[channel][i];
-        }
-    }
-
-    // Convertir a 16-bit PCM
-    const output = new Int16Array(interleaved.length);
-    for (let i = 0; i < interleaved.length; i++) {
-        output[i] = interleaved[i] < 0 ? interleaved[i] * 0x8000 : interleaved[i] * 0x7FFF;
-    }
-
-    // Copiar los datos PCM al buffer WAV
-    const wavView = new DataView(bufferWav);
-    for (let i = 0; i < output.length; i++) {
-        wavView.setInt16(44 + i * 2, output[i], true);
-    }
-
-    return new Blob([bufferWav], { type: 'audio/wav' });
-};
-
 // Función para convertir audio a WAV usando Convertio
 const convertAudioToWav = async (audioBlob) => {
     const formData = new FormData();
@@ -152,7 +71,7 @@ const convertAudioToWav = async (audioBlob) => {
 
         const data = await response.json();
         if (data.data && data.data.output) {
-            // Descargamos el archivo convertido
+            // Obtiene la URL del archivo convertido
             const fileUrl = data.data.output[0].url;
             const fileResponse = await fetch(fileUrl);
             const fileBlob = await fileResponse.blob(); // Obtiene el archivo en formato Blob
@@ -180,7 +99,7 @@ const startRecording = async () => {
 
     mediaRecorder.onstop = async () => {
         console.log('Grabación detenida, procesando audio...');
-        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' }); // Cambiado a 'audio/wav'
+        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' }); // Crea un Blob de audio WAV
 
         if (audioBlob.size > 0) {
             // Reproducir el audio grabado
@@ -189,12 +108,8 @@ const startRecording = async () => {
             audioPlayback.controls = true;
             console.log('Audio listo para reproducirse.');
 
-            // Convertir el Blob a WAV
-            const wavBlob = await convertBlobToWav(audioBlob);
-            console.log('Blob convertido a WAV.');
-
             // Convertir el audio a WAV usando Convertio
-            const convertedAudioBlob = await convertAudioToWav(wavBlob);
+            const convertedAudioBlob = await convertAudioToWav(audioBlob);
             if (convertedAudioBlob) {
                 // Enviar el audio corregido al servidor
                 const response = await sendAudioToDigitalOcean(convertedAudioBlob);
