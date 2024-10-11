@@ -49,6 +49,14 @@ const sendAudio = async (audioBlob) => {
     }
 };
 
+// Definición de la función createTagsQuestions
+const createTagsQuestions = (element, response) => {
+    console.log("Procesando la respuesta del servidor:", response);
+    const p = document.createElement('p');
+    p.textContent = JSON.stringify(response);
+    element.appendChild(p);
+};
+
 const startRecording = async () => {
     console.log('Iniciando grabación...');
     button.classList.add('recording');
@@ -63,9 +71,8 @@ const startRecording = async () => {
 
     mediaRecorder.onstop = async () => {
         console.log('Grabación detenida, procesando audio...');
-        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        const audioBlob = new Blob(audioChunks, { type: 'audio/x-wav' }); // Cambiado a 'audio/x-wav'
 
-        // Verifica que el Blob contenga audio PCM válido
         if (audioBlob.size > 0) {
             // Reproducir el audio grabado
             const audioUrl = URL.createObjectURL(audioBlob);
