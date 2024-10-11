@@ -56,7 +56,6 @@ const createTagsQuestions = (element, response) => {
     p.textContent = JSON.stringify(response);
     element.appendChild(p);
 };
-
 const startRecording = async () => {
     console.log('Iniciando grabación...');
     button.classList.add('recording');
