@@ -5,6 +5,7 @@ let audioStream = null;
 const button = document.getElementById('toggle-record');
 const audioPlayback = document.getElementById('audio-playback');
 
+// Función para solicitar acceso al micrófono
 const requestAudioStream = async () => {
     if (!audioStream) {
         try {
@@ -21,6 +22,33 @@ const requestAudioStream = async () => {
     return audioStream;
 };
 
+// Función para enviar el audio al servidor
+const sendAudio = async (audioBlob) => {
+    const url = 'https://goldfish-app-kfo84.ondigitalocean.app/upload'; // Reemplaza con la URL de tu servidor
+
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'audio.wav'); // Agrega el Blob como un archivo con un nombre
+
+    try {
+        console.log('Enviando audio al servidor...');
+        const response = await fetch(url, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            console.log('Archivo subido con éxito:', data);
+            return data; // Devuelve la respuesta del servidor
+        } else {
+            console.error('Error al subir el archivo:', response.status, response.statusText);
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+    } catch (error) {
+        console.error('Error durante la subida del audio:', error);
+    }
+};
+
 const startRecording = async () => {
     console.log('Iniciando grabación...');
     button.classList.add('recording');
@@ -35,7 +63,6 @@ const startRecording = async () => {
 
     mediaRecorder.onstop = async () => {
         console.log('Grabación detenida, procesando audio...');
-        // Crear el Blob del audio directamente en formato WAV
         const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
 
         // Verifica que el Blob contenga audio PCM válido
@@ -46,9 +73,8 @@ const startRecording = async () => {
             audioPlayback.controls = true;
             console.log('Audio listo para reproducirse.');
 
-            console.log('Enviando audio al servidor...');
+            // Enviar el audio al servidor
             const response = await sendAudio(audioBlob);
-            console.log('Respuesta del servidor recibida:', response);
             createTagsQuestions(document.body, response);
         } else {
             console.error('El Blob de audio está vacío.');
