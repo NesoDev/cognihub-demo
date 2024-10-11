@@ -25,7 +25,7 @@ const requestAudioStream = async () => {
 // Función para convertir audio a WAV usando Convertio
 const convertAudioToWav = async (audioBlob) => {
     const formData = new FormData();
-    const apiKey = 'YOUR_API_KEY'; // Reemplaza con tu API Key de Convertio
+    const apiKey = '794a14b25dce327ca6b01298a66a8cec'; // Reemplaza con tu API Key de Convertio
     formData.append('apikey', apiKey);
     formData.append('input', 'raw');
     formData.append('file', audioBlob, 'audio.wav'); // Usa el Blob como archivo
