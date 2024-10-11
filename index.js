@@ -49,49 +49,79 @@ const sendAudioToDigitalOcean = async (audioBlob) => {
     }
 };
 
-// Función para convertir audio a WAV usando Convertio
-const convertAudioToWav = async (audioBlob) => {
-    const formData = new FormData();
-    const apiKey = '794a14b25dce327ca6b01298a66a8cec'; // Reemplaza con tu API Key de Convertio
-    formData.append('apikey', apiKey);
-    formData.append('input', 'raw'); // Cambiado a 'raw' para enviar el archivo
-    formData.append('file', audioBlob, 'audio.wav'); // Usa el Blob como archivo
-    formData.append('outputformat', 'wav');
+// Función para convertir audio a WAV y normalizarlo
+const normalizeAudio = (audioBlob) => {
+    return new Promise((resolve, reject) => {
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const reader = new FileReader();
 
-    const convertioUrl = 'https://api.convertio.co/convert';
-    try {
-        const response = await fetch(convertioUrl, {
-            method: 'POST',
-            body: formData,
-        });
+        reader.onload = async (event) => {
+            const audioData = await audioContext.decodeAudioData(event.target.result);
+            const offlineContext = new OfflineAudioContext(1, audioData.length, audioContext.sampleRate);
 
-        if (!response.ok) {
-            throw new Error(`Error en Convertio: ${response.statusText}`);
-        }
+            const source = offlineContext.createBufferSource();
+            source.buffer = audioData;
 
-        const data = await response.json();
-        if (data.data && data.data.output) {
-            // Obtiene la URL del archivo convertido
-            const fileUrl = data.data.output[0].url;
-            const fileResponse = await fetch(fileUrl);
-            const fileBlob = await fileResponse.blob(); // Obtiene el archivo en formato Blob
+            // Procesar audio si es necesario
+            source.connect(offlineContext.destination);
+            source.start(0);
 
-            return fileBlob; // Devuelve el Blob del archivo WAV corregido
-        } else {
-            throw new Error('No se pudo obtener el archivo convertido.');
-        }
-    } catch (error) {
-        console.error('Error al convertir el audio:', error);
-    }
+            offlineContext.startRendering().then((renderedBuffer) => {
+                const wavBlob = bufferToWave(renderedBuffer, renderedBuffer.length);
+                resolve(wavBlob);
+            }).catch(reject);
+        };
+
+        reader.readAsArrayBuffer(audioBlob);
+    });
 };
 
+// Función para convertir un buffer a un Blob de formato WAV
+const bufferToWave = (abuffer, len) => {
+    const numOfChannels = abuffer.numberOfChannels;
+    const length = len * 2 + 44; // 44 bytes de encabezado WAV
+    const buffer = new ArrayBuffer(length);
+    const view = new DataView(buffer);
+    const channels = [];
+
+    for (let i = 0; i < numOfChannels; i++) {
+        channels.push(abuffer.getChannelData(i));
+    }
+
+    writeUTFBytes(view, 0, 'RIFF');
+    view.setUint32(4, length - 8, true);
+    writeUTFBytes(view, 8, 'WAVE');
+    writeUTFBytes(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true); // PCM
+    view.setUint16(22, numOfChannels, true);
+    view.setUint32(24, 44100, true); // Sample rate
+    view.setUint32(28, 44100 * 2, true); // Byte rate
+    view.setUint16(32, numOfChannels * 2, true); // Block align
+    view.setUint16(34, 16, true); // Bits per sample
+    writeUTFBytes(view, 36, 'data');
+    view.setUint32(40, length - 44, true);
+
+    let offset = 44;
+    for (let i = 0; i < len; i++) {
+        for (let channel = 0; channel < numOfChannels; channel++) {
+            const sample = Math.max(-1, Math.min(1, channels[channel][i])); // Normalize sample to [-1, 1]
+            view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+            offset += 2;
+        }
+    }
+
+    return new Blob([buffer], { type: 'audio/wav' });
+};
+
+// Iniciar la grabación
 const startRecording = async () => {
     console.log('Iniciando grabación...');
     button.classList.add('recording');
     const stream = await requestAudioStream();
 
     mediaRecorder = new MediaRecorder(stream);
-    
+
     mediaRecorder.ondataavailable = (event) => {
         console.log('Fragmento de audio disponible.');
         audioChunks.push(event.data);
@@ -99,7 +129,7 @@ const startRecording = async () => {
 
     mediaRecorder.onstop = async () => {
         console.log('Grabación detenida, procesando audio...');
-        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' }); // Crea un Blob de audio WAV
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' }); // Cambiado a webm para asegurar la compatibilidad
 
         if (audioBlob.size > 0) {
             // Reproducir el audio grabado
@@ -108,11 +138,11 @@ const startRecording = async () => {
             audioPlayback.controls = true;
             console.log('Audio listo para reproducirse.');
 
-            // Convertir el audio a WAV usando Convertio
-            const convertedAudioBlob = await convertAudioToWav(audioBlob);
-            if (convertedAudioBlob) {
-                // Enviar el audio corregido al servidor
-                const response = await sendAudioToDigitalOcean(convertedAudioBlob);
+            // Normalizar y convertir el audio a WAV
+            const normalizedAudioBlob = await normalizeAudio(audioBlob);
+            if (normalizedAudioBlob) {
+                // Enviar el audio normalizado al servidor
+                const response = await sendAudioToDigitalOcean(normalizedAudioBlob);
                 console.log("Respuesta del servidor:", response);
             }
         } else {
