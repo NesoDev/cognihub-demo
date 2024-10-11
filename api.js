@@ -1,6 +1,4 @@
-import { FFmpeg } from window.ffmpeg
-
-const ffmpeg = FFmpeg.createFFmpeg({ log: true });
+const ffmpeg = window.FFmpeg.createFFmpeg({ log: true });
 
 const loadFFmpeg = async () => {
     if (!ffmpeg.isLoaded()) {
@@ -15,7 +13,7 @@ const processAudioWithFFmpeg = async (audioBlob) => {
 
     // Cargar el archivo de audio en ffmpeg.wasm
     const audioFile = new File([audioBlob], 'input.wav', { type: 'audio/wav' });
-    await ffmpeg.FS('writeFile', 'input.wav', await fetch(audioFile));
+    await ffmpeg.FS('writeFile', 'input.wav', await fetch(audioFile).then(response => response.arrayBuffer()));
 
     // Convertir el archivo de audio a WAV usando FFmpeg
     await ffmpeg.run('-i', 'input.wav', 'output.wav');
@@ -30,4 +28,4 @@ const processAudioWithFFmpeg = async (audioBlob) => {
     return outputUrl; // Devolver la URL para reproducir el archivo convertido
 };
 
-export {loadFFmpeg, processAudioWithFFmpeg};
+export { loadFFmpeg, processAudioWithFFmpeg };
