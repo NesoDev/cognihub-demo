@@ -1,5 +1,3 @@
-// ffmpeg.js
-const { FFmpeg } = window.ffmpeg;
 
 const ffmpeg = FFmpeg.createFFmpeg({ log: true });
 
