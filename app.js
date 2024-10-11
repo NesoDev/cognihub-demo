@@ -6,7 +6,9 @@ const audioPlayback = document.getElementById('audio-playback');
 
 const requestAudioStream = async () => {
   try {
+    console.log('Solicitando acceso al micrófono...');
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    console.log('Acceso al micrófono concedido.');
     return stream;
   } catch (error) {
     console.error('Error al acceder al micrófono:', error);
@@ -15,43 +17,47 @@ const requestAudioStream = async () => {
 };
 
 const startRecording = async () => {
+  console.log('Iniciando grabación...');
   button.classList.add('recording');
   const stream = await requestAudioStream();
   
   mediaRecorder = new MediaRecorder(stream);
   
   mediaRecorder.ondataavailable = (event) => {
+    console.log('Fragmento de audio disponible.');
     audioChunks.push(event.data);
   };
 
   mediaRecorder.onstop = async () => {
-    // Crear el blob de audio una vez que se detiene la grabación
+    console.log('Grabación detenida, procesando audio...');
     const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
     const audioUrl = URL.createObjectURL(audioBlob);
     audioPlayback.src = audioUrl;
     audioPlayback.controls = true;
 
-    // Enviar el audio una vez que se detuvo la grabación
-    console.log('Enviando audio...');
+    console.log('Enviando audio al servidor...');
     const response = await sendAudio(audioBlob);
-    console.log('Respuesta recibida:', response);
+    console.log('Respuesta del servidor recibida:', response);
     createTagsQuestions(document.body, response);
 
     audioChunks = []; // Limpiar fragmentos de audio
+    console.log('Fragmentos de audio limpiados.');
   };
 
   mediaRecorder.start();
-  console.log('Grabación iniciada');
+  console.log('Grabación iniciada.');
 };
 
 const stopRecording = () => {
+  console.log('Deteniendo grabación...');
   button.classList.remove('recording');
   mediaRecorder.stop(); // Esto disparará el evento onstop
-  console.log('Grabación detenida');
+  console.log('Grabación detenida.');
 };
 
 const toggleRecording = () => { 
   state = !state;
+  console.log('Estado de grabación:', state ? 'Iniciando grabación' : 'Deteniendo grabación');
   if (state) { 
     startRecording();
   } else { 
@@ -60,24 +66,30 @@ const toggleRecording = () => {
 };
 
 const sendAudio = async (file) => {
+  console.log('Preparando envío de audio...');
   const formData = new FormData();
   formData.append('audio', file);
 
-  const response = await fetch('https://goldfish-app-kfo84.ondigitalocean.app/upload', {
-    method: 'POST',
-    body: formData,
-  });
+  try {
+    const response = await fetch('https://goldfish-app-kfo84.ondigitalocean.app/upload', {
+      method: 'POST',
+      body: formData,
+    });
 
-  if (response.ok) {
-    const data = await response.json();
-    console.log('Audio enviado:', data);
-    return data;
-  } else {
-    console.error('Error al enviar el audio:', response.status);
+    if (response.ok) {
+      const data = await response.json();
+      console.log('Audio enviado exitosamente:', data);
+      return data;
+    } else {
+      console.error('Error al enviar el audio:', response.status);
+    }
+  } catch (error) {
+    console.error('Error en la solicitud de envío de audio:', error);
   }
 };
 
 const createTagQuestion = (text) => {
+  console.log('Creando un nuevo tag de pregunta.');
   const div = document.createElement('div');
   div.textContent = text;
   div.style.display = 'flex';
@@ -91,13 +103,13 @@ const createTagQuestion = (text) => {
 };
 
 const createTagsQuestions = (container, data) => {
-  console.log('Creando tags...');
+  console.log('Creando tags de preguntas con los datos recibidos...');
   const questions = data.transcribed_text; // Asegúrate de que este sea el formato correcto
   Object.values(questions).forEach(question => {
       let tag = createTagQuestion(question);
       container.appendChild(tag);
   });
-  console.log('Tags creadas');
+  console.log('Tags creadas y añadidas al DOM.');
 }
 
 button.addEventListener('click', toggleRecording);
