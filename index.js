@@ -22,12 +22,120 @@ const requestAudioStream = async () => {
     return audioStream;
 };
 
+// Función para enviar el audio a DigitalOcean
+const sendAudioToDigitalOcean = async (audioBlob) => {
+    const url = 'https://goldfish-app-kfo84.ondigitalocean.app/upload'; // Reemplaza con la URL de tu servidor
+
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'audio.wav'); // Agrega el Blob como un archivo con un nombre
+
+    try {
+        console.log('Enviando audio al servidor de DigitalOcean...');
+        const response = await fetch(url, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            console.log('Archivo subido con éxito a DigitalOcean:', data);
+            return data; // Devuelve la respuesta del servidor
+        } else {
+            console.error('Error al subir el archivo a DigitalOcean:', response.status, response.statusText);
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+    } catch (error) {
+        console.error('Error durante la subida del audio a DigitalOcean:', error);
+    }
+};
+
+// Función para convertir el Blob a WAV
+const convertBlobToWav = (audioBlob) => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            audioContext.decodeAudioData(reader.result)
+                .then((buffer) => {
+                    const wavBlob = bufferToWav(buffer);
+                    resolve(wavBlob);
+                })
+                .catch(reject);
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(audioBlob);
+    });
+};
+
+// Función para convertir el buffer de audio a WAV
+const bufferToWav = (buffer) => {
+    const numOfChannels = buffer.numberOfChannels;
+    const length = buffer.length * numOfChannels * 2 + 44; // 44 bytes para el header WAV
+    const bufferWav = new ArrayBuffer(length);
+    const view = new DataView(bufferWav);
+    const channels = [];
+    let offset = 0;
+
+    // Escribir encabezado WAV
+    const writeString = (str) => {
+        for (let i = 0; i < str.length; i++) {
+            view.setUint8(offset + i, str.charCodeAt(i));
+        }
+        offset += str.length;
+    };
+
+    writeString('RIFF'); // Chunk ID
+    view.setUint32(offset, length - 8, true); // Chunk Size
+    offset += 4;
+    writeString('WAVE'); // Format
+    writeString('fmt '); // Subchunk1 ID
+    view.setUint32(offset, 16, true); // Subchunk1 Size
+    offset += 4;
+    view.setUint16(offset, 1, true); // Audio Format (PCM)
+    offset += 2;
+    view.setUint16(offset, numOfChannels, true); // Num Channels
+    view.setUint32(offset, 44100, true); // Sample Rate
+    view.setUint32(offset, 44100 * 2 * numOfChannels, true); // Byte Rate
+    view.setUint16(offset, numOfChannels * 2, true); // Block Align
+    view.setUint16(offset, 16, true); // Bits per sample
+    writeString('data'); // Subchunk2 ID
+    view.setUint32(offset, length - offset - 4, true); // Subchunk2 Size
+    offset += 4;
+
+    // Copiar los datos de audio
+    for (let channel = 0; channel < numOfChannels; channel++) {
+        channels[channel] = buffer.getChannelData(channel);
+    }
+    let interleaved = new Float32Array(length / 2);
+    let offsetInterleaved = 0;
+
+    for (let i = 0; i < buffer.length; i++) {
+        for (let channel = 0; channel < numOfChannels; channel++) {
+            interleaved[offsetInterleaved++] = channels[channel][i];
+        }
+    }
+
+    // Convertir a 16-bit PCM
+    const output = new Int16Array(interleaved.length);
+    for (let i = 0; i < interleaved.length; i++) {
+        output[i] = interleaved[i] < 0 ? interleaved[i] * 0x8000 : interleaved[i] * 0x7FFF;
+    }
+
+    // Copiar los datos PCM al buffer WAV
+    const wavView = new DataView(bufferWav);
+    for (let i = 0; i < output.length; i++) {
+        wavView.setInt16(44 + i * 2, output[i], true);
+    }
+
+    return new Blob([bufferWav], { type: 'audio/wav' });
+};
+
 // Función para convertir audio a WAV usando Convertio
 const convertAudioToWav = async (audioBlob) => {
     const formData = new FormData();
     const apiKey = '794a14b25dce327ca6b01298a66a8cec'; // Reemplaza con tu API Key de Convertio
     formData.append('apikey', apiKey);
-    formData.append('input', 'raw');
+    formData.append('input', 'raw'); // Cambiado a 'raw' para enviar el archivo
     formData.append('file', audioBlob, 'audio.wav'); // Usa el Blob como archivo
     formData.append('outputformat', 'wav');
 
@@ -49,48 +157,13 @@ const convertAudioToWav = async (audioBlob) => {
             const fileResponse = await fetch(fileUrl);
             const fileBlob = await fileResponse.blob(); // Obtiene el archivo en formato Blob
 
-            return fileBlob; // Devuelve el Blob del archivo WAV
+            return fileBlob; // Devuelve el Blob del archivo WAV corregido
         } else {
             throw new Error('No se pudo obtener el archivo convertido.');
         }
     } catch (error) {
         console.error('Error al convertir el audio:', error);
     }
-};
-
-// Función para enviar el archivo WAV al servidor
-const sendAudio = async (audioBlob) => {
-    const url = 'https://goldfish-app-kfo84.ondigitalocean.app/upload'; // Reemplaza con la URL de tu servidor
-
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'audio.wav'); // Agrega el Blob como un archivo con un nombre
-
-    try {
-        console.log('Enviando audio al servidor...');
-        const response = await fetch(url, {
-            method: 'POST',
-            body: formData,
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            console.log('Archivo subido con éxito:', data);
-            return data; // Devuelve la respuesta del servidor
-        } else {
-            console.error('Error al subir el archivo:', response.status, response.statusText);
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-    } catch (error) {
-        console.error('Error durante la subida del audio:', error);
-    }
-};
-
-// Definición de la función createTagsQuestions
-const createTagsQuestions = (element, response) => {
-    console.log("Procesando la respuesta del servidor:", response);
-    const p = document.createElement('p');
-    p.textContent = JSON.stringify(response);
-    element.appendChild(p);
 };
 
 const startRecording = async () => {
@@ -107,7 +180,7 @@ const startRecording = async () => {
 
     mediaRecorder.onstop = async () => {
         console.log('Grabación detenida, procesando audio...');
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' }); // Cambiado a 'audio/webm' o el tipo correcto según tu grabación
+        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' }); // Cambiado a 'audio/wav'
 
         if (audioBlob.size > 0) {
             // Reproducir el audio grabado
@@ -116,12 +189,16 @@ const startRecording = async () => {
             audioPlayback.controls = true;
             console.log('Audio listo para reproducirse.');
 
-            // Convertir el audio a WAV
-            const convertedAudioBlob = await convertAudioToWav(audioBlob);
+            // Convertir el Blob a WAV
+            const wavBlob = await convertBlobToWav(audioBlob);
+            console.log('Blob convertido a WAV.');
+
+            // Convertir el audio a WAV usando Convertio
+            const convertedAudioBlob = await convertAudioToWav(wavBlob);
             if (convertedAudioBlob) {
-                // Enviar el audio convertido al servidor
-                const response = await sendAudio(convertedAudioBlob);
-                createTagsQuestions(document.body, response);
+                // Enviar el audio corregido al servidor
+                const response = await sendAudioToDigitalOcean(convertedAudioBlob);
+                console.log("Respuesta del servidor:", response);
             }
         } else {
             console.error('El Blob de audio está vacío.');
@@ -144,12 +221,8 @@ const stopRecording = () => {
 
 const toggleRecording = () => {
     state = !state;
-    console.log('Estado de grabación:', state ? 'Iniciando grabación' : 'Deteniendo grabación');
-    if (state) {
-        startRecording();
-    } else {
-        stopRecording();
-    }
+    console.log('Estado de grabación:', state);
+    state ? startRecording() : stopRecording();
 };
 
 button.addEventListener('click', toggleRecording);
