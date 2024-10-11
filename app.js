@@ -1,10 +1,11 @@
+import createTagsQuestions from "./question.js";
+import sendAudio from "./api.js";
+
 let state = false;
 let mediaRecorder;
 let audioChunks = [];
 const button = document.getElementById('toggle-record');
 const audioPlayback = document.getElementById('audio-playback');
-let response;
-let audioBlob;
 
 const requestAudioStream = async () => {
   try {
@@ -26,28 +27,30 @@ const startRecording = async () => {
     audioChunks.push(event.data);
   };
 
-  mediaRecorder.onstop = () => {
-    audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+  mediaRecorder.onstop = async () => {
+    // Crear el blob de audio una vez que se detiene la grabación
+    const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
     const audioUrl = URL.createObjectURL(audioBlob);
     audioPlayback.src = audioUrl;
     audioPlayback.controls = true;
-    audioChunks = [];
+
+    // Enviar el audio una vez que se detuvo la grabación
+    console.log('Enviando audio...');
+    const response = await sendAudio(audioBlob);
+    console.log('Respuesta recibida:', response);
+    createTagsQuestions(document.body, response);
+
+    audioChunks = []; // Limpiar fragmentos de audio
   };
 
   mediaRecorder.start();
   console.log('Grabación iniciada');
 };
 
-const stopRecording = async () => {
+const stopRecording = () => {
   button.classList.remove('recording');
-  mediaRecorder.stop();
+  mediaRecorder.stop(); // Esto disparará el evento onstop
   console.log('Grabación detenida');
-
-  console.log('enviando audio')
-  response = await sendAudio(audioBlob);
-  console.log('respuesta recibida')
-  console.log(`res: ${response}`)
-  createTagsQuestions(document.body, response);
 };
 
 const toggleRecording = () => { 
@@ -60,17 +63,20 @@ const toggleRecording = () => {
 };
 
 const sendAudio = async (file) => {
+  const formData = new FormData();
+  formData.append('audio', file);
+
   const response = await fetch('https://goldfish-app-kfo84.ondigitalocean.app/upload', {
-      method: 'POST',
-      body: new FormData().append('audio', file),
+    method: 'POST',
+    body: formData,
   });
 
   if (response.ok) {
-      const data = await response.json();
-      console.log('Audio enviado:', data);
-      return data;
+    const data = await response.json();
+    console.log('Audio enviado:', data);
+    return data;
   } else {
-      console.error('Error al enviar el audio:', response.status);
+    console.error('Error al enviar el audio:', response.status);
   }
 };
 
@@ -88,13 +94,13 @@ const createTagQuestion = (text) => {
 };
 
 const createTagsQuestions = (container, data) => {
-  console.log('creando tags')
-  questions = data.transcribed_text
+  console.log('Creando tags...');
+  const questions = data.transcribed_text; // Asegúrate de que este sea el formato correcto
   Object.values(questions).forEach(question => {
       let tag = createTagQuestion(question);
-      container.appendChild(tag)
+      container.appendChild(tag);
   });
-  console.log('tags creadas')
+  console.log('Tags creadas');
 }
 
 button.addEventListener('click', toggleRecording);
