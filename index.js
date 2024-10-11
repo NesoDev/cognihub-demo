@@ -22,72 +22,66 @@ const requestAudioStream = async () => {
     return audioStream;
 };
 
-// Función para enviar el audio a Convertio para convertir a WAV
-const convertToWav = async (audioBlob) => {
-    const apiKey = '794a14b25dce327ca6b01298a66a8cec'; // Reemplaza con tu API Key de Convertio
-    const url = 'https://api.convertio.co/convert';
+// Función para convertir audio a WAV usando Convertio
+const convertAudioToWav = async (audioBlob) => {
+    const formData = new FormData();
+    const apiKey = 'YOUR_API_KEY'; // Reemplaza con tu API Key de Convertio
+    formData.append('apikey', apiKey);
+    formData.append('input', 'raw');
+    formData.append('file', audioBlob, 'audio.wav'); // Usa el Blob como archivo
+    formData.append('outputformat', 'wav');
 
-    // Convertir el Blob a un formato base64
-    const reader = new FileReader();
-    const base64Audio = await new Promise((resolve, reject) => {
-        reader.onloadend = () => resolve(reader.result.split(',')[1]); // Obtener solo la parte base64
-        reader.onerror = reject;
-        reader.readAsDataURL(audioBlob);
-    });
-
-    const requestBody = {
-        apikey: apiKey,
-        input: 'raw', // Usamos 'raw' porque vamos a enviar el contenido
-        file: base64Audio,
-        filename: 'audio.wav', // Nombre del archivo
-        outputformat: 'wav' // Formato de salida deseado
-    };
-
+    const convertioUrl = 'https://api.convertio.co/convert';
     try {
-        console.log('Enviando audio a Convertio...');
-        const response = await fetch(url, {
+        const response = await fetch(convertioUrl, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestBody)
+            body: formData,
         });
 
         if (!response.ok) {
-            throw new Error(`Error en Convertio: ${response.status}`);
-        }
-
-        const responseData = await response.json();
-        console.log('Conversión a WAV completada:', responseData);
-        return responseData; // Devuelve los datos de respuesta de Convertio
-    } catch (error) {
-        console.error('Error al convertir el archivo:', error);
-    }
-};
-
-// Función para enviar el audio convertido a DigitalOcean
-const sendAudioToDigitalOcean = async (url) => {
-    const uploadUrl = 'https://goldfish-app-kfo84.ondigitalocean.app/upload'; // Reemplaza con la URL de tu servidor
-
-    try {
-        console.log('Enviando archivo convertido al servidor DigitalOcean...');
-        const response = await fetch(uploadUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ url }), // Aquí asumo que el servidor espera un JSON con la URL del archivo
-        });
-
-        if (!response.ok) {
-            throw new Error(`Error al subir el archivo a DigitalOcean: ${response.status}`);
+            throw new Error(`Error en Convertio: ${response.statusText}`);
         }
 
         const data = await response.json();
-        console.log('Archivo subido a DigitalOcean con éxito:', data);
-        return data; // Devuelve la respuesta del servidor
+        if (data.data && data.data.output) {
+            // Descargamos el archivo convertido
+            const fileUrl = data.data.output[0].url;
+            const fileResponse = await fetch(fileUrl);
+            const fileBlob = await fileResponse.blob(); // Obtiene el archivo en formato Blob
+
+            return fileBlob; // Devuelve el Blob del archivo WAV
+        } else {
+            throw new Error('No se pudo obtener el archivo convertido.');
+        }
     } catch (error) {
-        console.error('Error durante la subida al servidor:', error);
+        console.error('Error al convertir el audio:', error);
+    }
+};
+
+// Función para enviar el archivo WAV al servidor
+const sendAudio = async (audioBlob) => {
+    const url = 'https://goldfish-app-kfo84.ondigitalocean.app/upload'; // Reemplaza con la URL de tu servidor
+
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'audio.wav'); // Agrega el Blob como un archivo con un nombre
+
+    try {
+        console.log('Enviando audio al servidor...');
+        const response = await fetch(url, {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            console.log('Archivo subido con éxito:', data);
+            return data; // Devuelve la respuesta del servidor
+        } else {
+            console.error('Error al subir el archivo:', response.status, response.statusText);
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+    } catch (error) {
+        console.error('Error durante la subida del audio:', error);
     }
 };
 
@@ -113,7 +107,7 @@ const startRecording = async () => {
 
     mediaRecorder.onstop = async () => {
         console.log('Grabación detenida, procesando audio...');
-        const audioBlob = new Blob(audioChunks, { type: 'audio/x-wav' });
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' }); // Cambiado a 'audio/webm' o el tipo correcto según tu grabación
 
         if (audioBlob.size > 0) {
             // Reproducir el audio grabado
@@ -122,14 +116,13 @@ const startRecording = async () => {
             audioPlayback.controls = true;
             console.log('Audio listo para reproducirse.');
 
-            // Convertir el audio a WAV usando Convertio
-            const convertioResponse = await convertToWav(audioBlob);
-            if (convertioResponse && convertioResponse.data && convertioResponse.data.url) {
-                // Enviar el audio convertido a DigitalOcean
-                await sendAudioToDigitalOcean(convertioResponse.data.url);
+            // Convertir el audio a WAV
+            const convertedAudioBlob = await convertAudioToWav(audioBlob);
+            if (convertedAudioBlob) {
+                // Enviar el audio convertido al servidor
+                const response = await sendAudio(convertedAudioBlob);
+                createTagsQuestions(document.body, response);
             }
-
-            createTagsQuestions(document.body, convertioResponse);
         } else {
             console.error('El Blob de audio está vacío.');
         }
