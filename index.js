@@ -22,30 +22,72 @@ const requestAudioStream = async () => {
     return audioStream;
 };
 
-// Función para enviar el audio al servidor
-const sendAudio = async (audioBlob) => {
-    const url = 'https://goldfish-app-kfo84.ondigitalocean.app/upload'; // Reemplaza con la URL de tu servidor
+// Función para enviar el audio a Convertio para convertir a WAV
+const convertToWav = async (audioBlob) => {
+    const apiKey = '794a14b25dce327ca6b01298a66a8cec'; // Reemplaza con tu API Key de Convertio
+    const url = 'https://api.convertio.co/convert';
 
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'audio.wav'); // Agrega el Blob como un archivo con un nombre
+    // Convertir el Blob a un formato base64
+    const reader = new FileReader();
+    const base64Audio = await new Promise((resolve, reject) => {
+        reader.onloadend = () => resolve(reader.result.split(',')[1]); // Obtener solo la parte base64
+        reader.onerror = reject;
+        reader.readAsDataURL(audioBlob);
+    });
+
+    const requestBody = {
+        apikey: apiKey,
+        input: 'raw', // Usamos 'raw' porque vamos a enviar el contenido
+        file: base64Audio,
+        filename: 'audio.wav', // Nombre del archivo
+        outputformat: 'wav' // Formato de salida deseado
+    };
 
     try {
-        console.log('Enviando audio al servidor...');
+        console.log('Enviando audio a Convertio...');
         const response = await fetch(url, {
             method: 'POST',
-            body: formData,
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(requestBody)
         });
 
-        if (response.ok) {
-            const data = await response.json();
-            console.log('Archivo subido con éxito:', data);
-            return data; // Devuelve la respuesta del servidor
-        } else {
-            console.error('Error al subir el archivo:', response.status, response.statusText);
-            throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok) {
+            throw new Error(`Error en Convertio: ${response.status}`);
         }
+
+        const responseData = await response.json();
+        console.log('Conversión a WAV completada:', responseData);
+        return responseData; // Devuelve los datos de respuesta de Convertio
     } catch (error) {
-        console.error('Error durante la subida del audio:', error);
+        console.error('Error al convertir el archivo:', error);
+    }
+};
+
+// Función para enviar el audio convertido a DigitalOcean
+const sendAudioToDigitalOcean = async (url) => {
+    const uploadUrl = 'https://goldfish-app-kfo84.ondigitalocean.app/upload'; // Reemplaza con la URL de tu servidor
+
+    try {
+        console.log('Enviando archivo convertido al servidor DigitalOcean...');
+        const response = await fetch(uploadUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ url }), // Aquí asumo que el servidor espera un JSON con la URL del archivo
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error al subir el archivo a DigitalOcean: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('Archivo subido a DigitalOcean con éxito:', data);
+        return data; // Devuelve la respuesta del servidor
+    } catch (error) {
+        console.error('Error durante la subida al servidor:', error);
     }
 };
 
@@ -56,6 +98,7 @@ const createTagsQuestions = (element, response) => {
     p.textContent = JSON.stringify(response);
     element.appendChild(p);
 };
+
 const startRecording = async () => {
     console.log('Iniciando grabación...');
     button.classList.add('recording');
@@ -70,7 +113,7 @@ const startRecording = async () => {
 
     mediaRecorder.onstop = async () => {
         console.log('Grabación detenida, procesando audio...');
-        const audioBlob = new Blob(audioChunks, { type: 'audio/x-wav' }); // Cambiado a 'audio/x-wav'
+        const audioBlob = new Blob(audioChunks, { type: 'audio/x-wav' });
 
         if (audioBlob.size > 0) {
             // Reproducir el audio grabado
@@ -79,9 +122,14 @@ const startRecording = async () => {
             audioPlayback.controls = true;
             console.log('Audio listo para reproducirse.');
 
-            // Enviar el audio al servidor
-            const response = await sendAudio(audioBlob);
-            createTagsQuestions(document.body, response);
+            // Convertir el audio a WAV usando Convertio
+            const convertioResponse = await convertToWav(audioBlob);
+            if (convertioResponse && convertioResponse.data && convertioResponse.data.url) {
+                // Enviar el audio convertido a DigitalOcean
+                await sendAudioToDigitalOcean(convertioResponse.data.url);
+            }
+
+            createTagsQuestions(document.body, convertioResponse);
         } else {
             console.error('El Blob de audio está vacío.');
         }
